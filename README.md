@@ -2,6 +2,8 @@
 
 用于孩子练习拼音
 
+读音用的是开源项目 [hugolpz/audio-cmn](https://github.com/hugolpz/audio-cmn) 的真人录音（CC BY-SA），放在 `frontend/public/audio/`，来源和改动见那里的 README。
+
 这是一个 [Vibebooth](https://github.com/Beane-Big/vibebooth) 模块，由 `create-vibebooth` 生成。
 
 ## 常用命令

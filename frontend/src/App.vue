@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { finals, initials, makeSyllable, randomCombination, toneOptions, validFinalsFor } from "./pinyin";
-import { getMe } from "./platform";
+import { computed, onBeforeUnmount, ref } from "vue";
+import { finals, initials, isWholeSyllable, makeSyllable, randomCombination, toneOptions, validFinalsFor } from "./pinyin";
+import { clipUrl, speechClips, speechText } from "./speech";
 
-const name = ref("");
 const selectedInitial = ref("b");
 const selectedFinal = ref("a");
 const selectedTone = ref(1);
@@ -12,12 +11,28 @@ const isSpeaking = ref(false);
 
 const allowedFinals = computed(() => new Set(validFinalsFor(selectedInitial.value)));
 const isValid = computed(() => allowedFinals.value.has(selectedFinal.value));
+const isWhole = computed(() => isValid.value && isWholeSyllable(selectedInitial.value, selectedFinal.value));
 const syllable = computed(() => isValid.value ? makeSyllable(selectedInitial.value, selectedFinal.value, selectedTone.value) : "—");
-const plainSyllable = computed(() => isValid.value ? makeSyllable(selectedInitial.value, selectedFinal.value) : "");
+const spelling = computed(() => isValid.value ? speechText(selectedInitial.value, selectedFinal.value, selectedTone.value) : "");
 
-onMounted(async () => { name.value = (await getMe()).name; });
+// 每次点“听一听”都换一轮播放，上一轮没播完的录音直接停掉。
+// 一直用同一个播放器换录音：iPad 上只有点按时开始播放的播放器，后面才能接着自动播放。
+const player = new Audio();
+let playRound = 0;
+let finishClip: (() => void) | null = null;
+
+function stopSpeaking() {
+  playRound += 1;
+  player.pause();
+  finishClip?.();
+  finishClip = null;
+  isSpeaking.value = false;
+}
+
+onBeforeUnmount(stopSpeaking);
 
 function selectInitial(initial: string) {
+  stopSpeaking();
   selectedInitial.value = initial;
   if (!validFinalsFor(initial).includes(selectedFinal.value)) selectedFinal.value = validFinalsFor(initial)[0];
   speechMessage.value = "";
@@ -25,11 +40,19 @@ function selectInitial(initial: string) {
 
 function selectFinal(final: string) {
   if (!allowedFinals.value.has(final)) return;
+  stopSpeaking();
   selectedFinal.value = final;
   speechMessage.value = "";
 }
 
+function selectTone(tone: number) {
+  stopSpeaking();
+  selectedTone.value = tone;
+  speechMessage.value = "";
+}
+
 function surpriseMe() {
+  stopSpeaking();
   const next = randomCombination();
   selectedInitial.value = next.initial;
   selectedFinal.value = next.final;
@@ -37,36 +60,38 @@ function surpriseMe() {
   speechMessage.value = "";
 }
 
-function speak() {
+// 播完或者被停掉都算结束，停掉时由调用方按轮次判断要不要接着播。
+function playClip(clip: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    finishClip = resolve;
+    player.onended = () => resolve();
+    player.onerror = () => reject(new Error(clip));
+    player.src = clipUrl(clip);
+    player.play().catch(reject);
+  });
+}
+
+async function speak() {
   if (!isValid.value) return;
-  if (!("speechSynthesis" in window)) {
-    speechMessage.value = "这个浏览器还不会说话，换一个新版浏览器试试吧。";
-    return;
+  stopSpeaking();
+  const round = playRound;
+  isSpeaking.value = true;
+  speechMessage.value = "";
+  try {
+    for (const clip of speechClips(selectedInitial.value, selectedFinal.value, selectedTone.value)) {
+      if (round !== playRound) return;
+      await playClip(clip);
+    }
+  } catch {
+    if (round === playRound) speechMessage.value = "读音没有加载出来，检查一下网络再试试。";
+  } finally {
+    if (round === playRound) isSpeaking.value = false;
   }
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(syllable.value);
-  utterance.lang = "zh-CN";
-  utterance.rate = 0.72;
-  utterance.pitch = 1.08;
-  const voice = window.speechSynthesis.getVoices().find((item) => item.lang.toLowerCase().startsWith("zh"));
-  if (voice) utterance.voice = voice;
-  utterance.onstart = () => { isSpeaking.value = true; speechMessage.value = "仔细听，再跟着读一遍！"; };
-  utterance.onend = () => { isSpeaking.value = false; };
-  utterance.onerror = () => { isSpeaking.value = false; speechMessage.value = "暂时没有找到中文语音，可以请爸爸妈妈帮忙读。"; };
-  window.speechSynthesis.speak(utterance);
 }
 </script>
 
 <template>
   <div class="app-shell">
-    <header class="topbar">
-      <a class="brand" href="/apps/pinyin/" aria-label="拼音乐园首页">
-        <span class="brand-mark" aria-hidden="true">拼</span>
-        <span><strong>拼音乐园</strong><small>快乐开口读</small></span>
-      </a>
-      <div class="greeting">{{ name ? `${name}，一起练习吧！` : "一起练习吧！" }} <span>👋</span></div>
-    </header>
-
     <main class="content">
       <section class="hero" aria-labelledby="page-title">
         <div class="hero-copy">
@@ -99,16 +124,16 @@ function speak() {
       <section class="result-card" aria-live="polite">
         <div class="result-decoration stars-left" aria-hidden="true">✦ · ✧</div>
         <div class="result-main">
-          <span class="result-label">它们组成了</span>
+          <span class="result-label">{{ isWhole ? "这是整体认读音节" : "它们组成了" }}</span>
           <div class="formula"><span>{{ selectedInitial || "∅" }}</span><b>＋</b><span>{{ selectedFinal }}</span><b>＝</b><strong>{{ syllable }}</strong></div>
           <div class="tone-picker" role="group" aria-label="选择声调">
-            <button v-for="tone in toneOptions" :key="tone.value" type="button" :class="{ selected: selectedTone === tone.value }" :aria-pressed="selectedTone === tone.value" @click="selectedTone = tone.value"><span>{{ tone.mark }}</span>{{ tone.label }}</button>
+            <button v-for="tone in toneOptions" :key="tone.value" type="button" :class="{ selected: selectedTone === tone.value }" :aria-pressed="selectedTone === tone.value" @click="selectTone(tone.value)"><span>{{ tone.mark }}</span>{{ tone.label }}</button>
           </div>
           <div class="result-actions">
             <button class="speak-button" type="button" :disabled="!isValid" @click="speak"><span aria-hidden="true">{{ isSpeaking ? "🎵" : "🔊" }}</span> {{ isSpeaking ? "正在播放" : `听一听 ${syllable}` }}</button>
             <button class="random-button" type="button" @click="surpriseMe"><span aria-hidden="true">🎲</span> 随机挑战</button>
           </div>
-          <p class="speech-message">{{ speechMessage || `${plainSyllable}，读得又准又响亮！` }}</p>
+          <p class="speech-message">{{ speechMessage || spelling }}</p>
         </div>
         <div class="result-decoration stars-right" aria-hidden="true">✧ · ✦</div>
       </section>
