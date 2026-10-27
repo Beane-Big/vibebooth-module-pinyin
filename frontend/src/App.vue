@@ -1,19 +1,22 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import { finals, initials, isWholeSyllable, makeSyllable, randomCombination, toneOptions, validFinalsFor } from "./pinyin";
-import { clipUrl, speechClips, speechText } from "./speech";
+import { clipUrl, finalClip, initialClip, speechSteps, speechText, syllableClip, type SpeechPart, type SpeechStep } from "./speech";
 
 const selectedInitial = ref("b");
 const selectedFinal = ref("a");
 const selectedTone = ref(1);
 const speechMessage = ref("");
 const isSpeaking = ref(false);
+const playingPart = ref<SpeechPart | null>(null);
 
 const allowedFinals = computed(() => new Set(validFinalsFor(selectedInitial.value)));
 const isValid = computed(() => allowedFinals.value.has(selectedFinal.value));
 const isWhole = computed(() => isValid.value && isWholeSyllable(selectedInitial.value, selectedFinal.value));
 const syllable = computed(() => isValid.value ? makeSyllable(selectedInitial.value, selectedFinal.value, selectedTone.value) : "—");
 const spelling = computed(() => isValid.value ? speechText(selectedInitial.value, selectedFinal.value, selectedTone.value) : "");
+const initialSound = computed(() => initialClip(selectedInitial.value));
+const finalSound = computed(() => isValid.value ? finalClip(selectedFinal.value, selectedTone.value) : undefined);
 
 // 每次点“听一听”都换一轮播放，上一轮没播完的录音直接停掉。
 // 一直用同一个播放器换录音：iPad 上只有点按时开始播放的播放器，后面才能接着自动播放。
@@ -27,6 +30,7 @@ function stopSpeaking() {
   finishClip?.();
   finishClip = null;
   isSpeaking.value = false;
+  playingPart.value = null;
 }
 
 onBeforeUnmount(stopSpeaking);
@@ -71,22 +75,33 @@ function playClip(clip: string): Promise<void> {
   });
 }
 
-async function speak() {
-  if (!isValid.value) return;
+async function play(steps: SpeechStep[]) {
   stopSpeaking();
   const round = playRound;
   isSpeaking.value = true;
   speechMessage.value = "";
   try {
-    for (const clip of speechClips(selectedInitial.value, selectedFinal.value, selectedTone.value)) {
+    for (const step of steps) {
       if (round !== playRound) return;
-      await playClip(clip);
+      playingPart.value = step.part ?? null;
+      await playClip(step.clip);
     }
   } catch {
     if (round === playRound) speechMessage.value = "读音没有加载出来，检查一下网络再试试。";
   } finally {
-    if (round === playRound) isSpeaking.value = false;
+    if (round === playRound) { isSpeaking.value = false; playingPart.value = null; }
   }
+}
+
+function speak() {
+  if (isValid.value) play(speechSteps(selectedInitial.value, selectedFinal.value, selectedTone.value));
+}
+
+// 点公式里的声母、韵母或者音节，只读这一部分。
+function speakPart(part: SpeechPart) {
+  if (!isValid.value) return;
+  const clip = part === "initial" ? initialSound.value : part === "final" ? finalSound.value : syllableClip(selectedInitial.value, selectedFinal.value, selectedTone.value);
+  if (clip) play([{ clip, part }]);
 }
 </script>
 
@@ -124,8 +139,14 @@ async function speak() {
       <section class="result-card" aria-live="polite">
         <div class="result-decoration stars-left" aria-hidden="true">✦ · ✧</div>
         <div class="result-main">
-          <span class="result-label">{{ isWhole ? "这是整体认读音节" : "它们组成了" }}</span>
-          <div class="formula"><span>{{ selectedInitial || "∅" }}</span><b>＋</b><span>{{ selectedFinal }}</span><b>＝</b><strong>{{ syllable }}</strong></div>
+          <span class="result-label">{{ isWhole ? "这是整体认读音节" : "它们组成了" }}，点一点可以单独听</span>
+          <div class="formula">
+            <button class="formula-part" :class="{ playing: playingPart === 'initial' }" type="button" :disabled="!initialSound" :aria-label="`听声母 ${selectedInitial}`" @click="speakPart('initial')"><span>{{ selectedInitial || "∅" }}</span></button>
+            <b>＋</b>
+            <button class="formula-part" :class="{ playing: playingPart === 'final' }" type="button" :disabled="!finalSound" :aria-label="`听韵母 ${selectedFinal}`" @click="speakPart('final')"><span>{{ selectedFinal }}</span></button>
+            <b>＝</b>
+            <button class="formula-part" :class="{ playing: playingPart === 'syllable' }" type="button" :disabled="!isValid" :aria-label="`听音节 ${syllable}`" @click="speakPart('syllable')"><strong>{{ syllable }}</strong></button>
+          </div>
           <div class="tone-picker" role="group" aria-label="选择声调">
             <button v-for="tone in toneOptions" :key="tone.value" type="button" :class="{ selected: selectedTone === tone.value }" :aria-pressed="selectedTone === tone.value" @click="selectTone(tone.value)"><span>{{ tone.mark }}</span>{{ tone.label }}</button>
           </div>
