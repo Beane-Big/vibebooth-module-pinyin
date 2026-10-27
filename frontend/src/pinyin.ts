@@ -18,8 +18,8 @@ const validCombinations: Record<string, string[]> = {
   p: ["a", "o", "i", "u", "ai", "ei", "ao", "ou", "ie", "iao", "an", "en", "in", "ian", "ang", "eng", "ing"],
   m: ["a", "o", "e", "i", "u", "ai", "ei", "ao", "ou", "ie", "iu", "iao", "an", "en", "in", "ian", "ang", "eng", "ing"],
   f: ["a", "o", "u", "ei", "ou", "an", "en", "ang", "eng"],
-  d: ["a", "e", "i", "u", "ai", "ei", "ao", "ou", "iu", "ie", "ui", "ia", "uo", "iao", "an", "en", "in", "un", "ian", "uan", "ang", "eng", "ing", "ong"],
-  t: ["a", "e", "i", "u", "ai", "ao", "ou", "ie", "ui", "uo", "iao", "an", "in", "un", "ian", "uan", "ang", "eng", "ing", "ong"],
+  d: ["a", "e", "i", "u", "ai", "ei", "ao", "ou", "iu", "ie", "ui", "ia", "uo", "iao", "an", "en", "un", "ian", "uan", "ang", "eng", "ing", "ong"],
+  t: ["a", "e", "i", "u", "ai", "ao", "ou", "ie", "ui", "uo", "iao", "an", "un", "ian", "uan", "ang", "eng", "ing", "ong"],
   n: ["a", "e", "i", "u", "ü", "ai", "ei", "ao", "ie", "iu", "uo", "üe", "iao", "an", "en", "in", "ian", "uan", "ang", "eng", "ing", "ong", "iang"],
   l: ["a", "o", "e", "i", "u", "ü", "ai", "ei", "ao", "ou", "ie", "iu", "uo", "üe", "ia", "iao", "an", "in", "un", "ian", "uan", "ang", "eng", "ing", "ong", "iang"],
   g: ["a", "e", "u", "ai", "ei", "ao", "ou", "ui", "ua", "uo", "uai", "an", "en", "un", "uan", "ang", "eng", "ong", "uang"],
@@ -33,20 +33,22 @@ const validCombinations: Record<string, string[]> = {
   z: ["a", "e", "i", "u", "ai", "ei", "ao", "ou", "ui", "uo", "an", "en", "un", "uan", "ang", "eng", "ong"],
   c: ["a", "e", "i", "u", "ai", "ao", "ou", "ui", "uo", "an", "en", "un", "uan", "ang", "eng", "ong"],
   s: ["a", "e", "i", "u", "ai", "ao", "ou", "ui", "uo", "an", "en", "un", "uan", "ang", "eng", "ong"],
-  y: ["a", "o", "e", "i", "ü", "ao", "ou", "üe", "an", "in", "ün", "üan", "ang", "ing", "ong"],
+  y: ["a", "e", "i", "ü", "ao", "ou", "üe", "an", "in", "ün", "üan", "ang", "ing", "ong"],
   w: ["a", "o", "u", "ai", "ei", "an", "en", "ang", "eng"],
 };
 
 export const toneOptions = [
   { value: 1, mark: "—", label: "一声" }, { value: 2, mark: "↗", label: "二声" },
   { value: 3, mark: "∨", label: "三声" }, { value: 4, mark: "↘", label: "四声" },
-  { value: 0, mark: "·", label: "轻声" },
 ];
 
 const toneMarks: Record<string, string[]> = {
   a: ["a", "ā", "á", "ǎ", "à"], e: ["e", "ē", "é", "ě", "è"], i: ["i", "ī", "í", "ǐ", "ì"],
   o: ["o", "ō", "ó", "ǒ", "ò"], u: ["u", "ū", "ú", "ǔ", "ù"], ü: ["ü", "ǖ", "ǘ", "ǚ", "ǜ"],
 };
+
+// 整体认读音节：直接读整个音节，不拆开拼。
+const wholeSyllables = new Set(["zhi", "chi", "shi", "ri", "zi", "ci", "si", "yi", "wu", "yu", "ye", "yue", "yuan", "yin", "yun", "ying"]);
 
 export function validFinalsFor(initial: string): string[] { return validCombinations[initial] ?? []; }
 
@@ -75,6 +77,8 @@ function addTone(syllable: string, tone: number): string {
 }
 
 export function makeSyllable(initial: string, final: string, tone = 0): string { return addTone(combine(initial, final), tone); }
+
+export function isWholeSyllable(initial: string, final: string): boolean { return wholeSyllables.has(combine(initial, final)); }
 
 export function randomCombination(): { initial: string; final: string } {
   const initial = initials[Math.floor(Math.random() * initials.length)].value;
