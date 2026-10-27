@@ -31,13 +31,14 @@ export function finalClip(final: string, tone: number): string | undefined {
 export function syllableClip(initial: string, final: string, tone: number): string { return clipName(makeSyllable(initial, final), tone); }
 
 export type SpeechPart = "initial" | "final" | "syllable";
-export type SpeechStep = { clip: string; part?: SpeechPart };
+// text 是可以交给设备中文语音读的汉字：录音是单字拼起来的，连读不自然，设备有中文语音时优先用它读。
+export type SpeechStep = { clip: string; part?: SpeechPart; text?: string };
 
 // 点“听一听”时依次播放的录音：整体认读音节先说“整体认读”再读音节；没有声母时直接读；其他的“声母—韵母—音节”拼读。
 // part 标出这一步对应界面上的哪一部分，播放时把它亮起来。
 export function speechSteps(initial: string, final: string, tone: number): SpeechStep[] {
   const syllable: SpeechStep = { clip: syllableClip(initial, final, tone), part: "syllable" };
-  if (isWholeSyllable(initial, final)) return [{ clip: wholeSyllableClip }, syllable];
+  if (isWholeSyllable(initial, final)) return [{ clip: wholeSyllableClip, text: "整体认读" }, syllable];
   if (!initial) return [syllable];
   const finalSound = finalClip(final, tone);
   return [{ clip: initialSounds[initial], part: "initial" }, ...(finalSound ? [{ clip: finalSound, part: "final" as const }] : []), syllable];

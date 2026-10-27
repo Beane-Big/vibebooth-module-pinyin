@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { finals, initials, isWholeSyllable, makeSyllable, randomCombination, toneOptions, validFinalsFor } from "./pinyin";
 import { clipUrl, finalClip, initialClip, speechSteps, speechText, syllableClip, type SpeechPart, type SpeechStep } from "./speech";
 
@@ -23,17 +23,33 @@ const finalSound = computed(() => isValid.value ? finalClip(selectedFinal.value,
 const player = new Audio();
 let playRound = 0;
 let finishClip: (() => void) | null = null;
+// 设备上的中文语音；语音列表是异步加载的，没有中文语音时用录音。
+let chineseVoice: SpeechSynthesisVoice | undefined;
+
+function loadChineseVoice() {
+  chineseVoice = window.speechSynthesis.getVoices().find((voice) => /^zh[-_](CN|Hans)/i.test(voice.lang));
+}
+
+onMounted(() => {
+  if (!("speechSynthesis" in window)) return;
+  loadChineseVoice();
+  window.speechSynthesis.addEventListener("voiceschanged", loadChineseVoice);
+});
 
 function stopSpeaking() {
   playRound += 1;
   player.pause();
+  if (chineseVoice) window.speechSynthesis.cancel();
   finishClip?.();
   finishClip = null;
   isSpeaking.value = false;
   playingPart.value = null;
 }
 
-onBeforeUnmount(stopSpeaking);
+onBeforeUnmount(() => {
+  stopSpeaking();
+  if ("speechSynthesis" in window) window.speechSynthesis.removeEventListener("voiceschanged", loadChineseVoice);
+});
 
 function selectInitial(initial: string) {
   stopSpeaking();
@@ -70,8 +86,22 @@ function playClip(clip: string): Promise<void> {
     finishClip = resolve;
     player.onended = () => resolve();
     player.onerror = () => reject(new Error(clip));
+    player.muted = false;
     player.src = clipUrl(clip);
     player.play().catch(reject);
+  });
+}
+
+// 用设备的中文语音读汉字，读完或者被停掉都算结束。
+function speakText(text: string, voice: SpeechSynthesisVoice): Promise<void> {
+  return new Promise((resolve) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.voice = voice;
+    utterance.lang = voice.lang;
+    finishClip = resolve;
+    utterance.onend = () => resolve();
+    utterance.onerror = () => resolve();
+    window.speechSynthesis.speak(utterance);
   });
 }
 
@@ -80,11 +110,18 @@ async function play(steps: SpeechStep[]) {
   const round = playRound;
   isSpeaking.value = true;
   speechMessage.value = "";
+  // 第一步用语音合成时，先在点按里让播放器静音播一下：iPad 上只有点按时播过的播放器，后面才能自动播放录音。
+  if (steps[0]?.text && chineseVoice) {
+    player.muted = true;
+    player.src = clipUrl(steps[steps.length - 1].clip);
+    player.play().then(() => { if (player.muted) player.pause(); }).catch(() => {});
+  }
   try {
     for (const step of steps) {
       if (round !== playRound) return;
       playingPart.value = step.part ?? null;
-      await playClip(step.clip);
+      if (step.text && chineseVoice) await speakText(step.text, chineseVoice);
+      else await playClip(step.clip);
     }
   } catch {
     if (round === playRound) speechMessage.value = "读音没有加载出来，检查一下网络再试试。";
