@@ -20,18 +20,27 @@ const wholeSyllableClip = "zhengti-rendu";
 
 function clipName(syllable: string, tone: number) { return syllable.replace(/ü/g, "v") + tone; }
 
-function finalClip(final: string, tone: number): string | undefined {
+// 声母、韵母、音节都能单独听；没有声母或者韵母 ong 时没有单独的录音，返回 undefined。
+export function initialClip(initial: string): string | undefined { return initialSounds[initial]; }
+
+export function finalClip(final: string, tone: number): string | undefined {
   if (final === "ong") return undefined;
   return clipName(finalSounds[final] ?? final, tone);
 }
 
-// 依次要播放的录音：整体认读音节先说“整体认读”再读音节；没有声母时直接读；其他的“声母—韵母—音节”拼读。
-export function speechClips(initial: string, final: string, tone: number): string[] {
-  const syllable = clipName(makeSyllable(initial, final), tone);
-  if (isWholeSyllable(initial, final)) return [wholeSyllableClip, syllable];
+export function syllableClip(initial: string, final: string, tone: number): string { return clipName(makeSyllable(initial, final), tone); }
+
+export type SpeechPart = "initial" | "final" | "syllable";
+export type SpeechStep = { clip: string; part?: SpeechPart };
+
+// 点“听一听”时依次播放的录音：整体认读音节先说“整体认读”再读音节；没有声母时直接读；其他的“声母—韵母—音节”拼读。
+// part 标出这一步对应界面上的哪一部分，播放时把它亮起来。
+export function speechSteps(initial: string, final: string, tone: number): SpeechStep[] {
+  const syllable: SpeechStep = { clip: syllableClip(initial, final, tone), part: "syllable" };
+  if (isWholeSyllable(initial, final)) return [{ clip: wholeSyllableClip }, syllable];
   if (!initial) return [syllable];
   const finalSound = finalClip(final, tone);
-  return [initialSounds[initial], ...(finalSound ? [finalSound] : []), syllable];
+  return [{ clip: initialSounds[initial], part: "initial" }, ...(finalSound ? [{ clip: finalSound, part: "final" as const }] : []), syllable];
 }
 
 // 和录音对应的文字，显示在“听一听”按钮下面。

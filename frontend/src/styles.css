@@ -131,6 +131,11 @@ button { font: inherit; -webkit-tap-highlight-color: transparent; }
 .result-main { position: relative; z-index: 1; width: min(100%, 590px); text-align: center; }
 .result-label { color: #7586a1; font-size: clamp(10px, 1.5vh, 12px); font-weight: 800; letter-spacing: .12em; }
 .formula { margin: clamp(3px, .8vh, 7px) 0 clamp(7px, 1.2vh, 12px); display: flex; align-items: baseline; justify-content: center; gap: clamp(6px, 1.4vw, 16px); }
+.formula-part { padding: 0 clamp(3px, .5vw, 6px); border: 0; border-radius: 12px; color: inherit; background: transparent; cursor: pointer; transition: background .15s ease, transform .15s ease; }
+.formula-part:hover:not(:disabled) { background: rgba(85, 126, 232, .08); }
+.formula-part.playing { background: #eaf0ff; transform: translateY(-2px); }
+.formula-part:disabled { cursor: default; }
+.formula-part:focus-visible { outline: 3px solid #273653; outline-offset: 2px; }
 .formula span { min-width: 32px; color: #536b94; font-size: clamp(24px, 4.7vh, 40px); font-weight: 900; }
 .formula b { color: #b3bfd1; font-size: clamp(16px, 2.7vh, 23px); }
 .formula strong { min-width: 76px; color: #ee7d2e; font-size: clamp(42px, 7.7vh, 68px); line-height: 1; text-shadow: 0 4px 0 #ffe4cc; }
