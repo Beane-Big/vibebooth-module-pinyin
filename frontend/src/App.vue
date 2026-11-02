@@ -145,27 +145,16 @@ function speakPart(part: SpeechPart) {
 <template>
   <div class="app-shell">
     <main class="content">
-      <section class="hero" aria-labelledby="page-title">
-        <div class="hero-copy">
-          <span class="eyebrow">🌟 今天也要大声读</span>
-          <h1 id="page-title">声母韵母碰碰车</h1>
-          <p>选一个声母，再选一个韵母，听听它们碰在一起怎么读！</p>
-        </div>
-        <div class="hero-art" aria-hidden="true"><span class="cloud cloud-one"></span><span class="cloud cloud-two"></span><span class="rainbow">🌈</span><span class="mascot">🐼</span></div>
-      </section>
-
-      <section class="learning-card">
-        <div class="picker-column">
-          <div class="section-heading"><span class="step step-blue">1</span><div><h2>选声母</h2><p>小火车的车头</p></div></div>
+      <section class="learning-card" aria-label="选声母和韵母">
+        <div class="picker-column initials-column">
+          <div class="section-heading"><span class="step step-blue">1</span><h2>选声母</h2></div>
           <div class="choice-grid initials-grid" role="group" aria-label="选择声母">
             <button v-for="initial in initials" :key="initial.value || 'none'" class="sound-chip initial-chip" :class="{ selected: selectedInitial === initial.value }" type="button" :aria-pressed="selectedInitial === initial.value" @click="selectInitial(initial.value)">{{ initial.label }}</button>
           </div>
         </div>
 
-        <div class="plus-sign" aria-hidden="true">＋</div>
-
-        <div class="picker-column">
-          <div class="section-heading"><span class="step step-orange">2</span><div><h2>选韵母</h2><p>小火车的车厢</p></div></div>
+        <div class="picker-column finals-column">
+          <div class="section-heading"><span class="step step-orange">2</span><h2>选韵母</h2></div>
           <div class="choice-grid finals-grid" role="group" aria-label="选择韵母">
             <button v-for="final in finals" :key="final" class="sound-chip final-chip" :class="{ selected: selectedFinal === final }" :disabled="!allowedFinals.has(final)" type="button" :aria-pressed="selectedFinal === final" @click="selectFinal(final)">{{ final }}</button>
           </div>
@@ -196,6 +185,5 @@ function speakPart(part: SpeechPart) {
         <div class="result-decoration stars-right" aria-hidden="true">✧ · ✦</div>
       </section>
     </main>
-    <footer>每天练一练，拼音更熟练 <span aria-hidden="true">🌱</span></footer>
   </div>
 </template>
