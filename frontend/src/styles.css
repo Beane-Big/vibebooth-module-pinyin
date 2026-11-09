@@ -64,6 +64,10 @@ button { font: inherit; -webkit-tap-highlight-color: transparent; }
 .step { width: clamp(29px, 4.3vh, 36px); height: clamp(29px, 4.3vh, 36px); display: grid; place-items: center; flex: 0 0 auto; border-radius: 50% 50% 50% 15%; color: #fff; font-size: clamp(14px, 2.2vh, 18px); font-weight: 900; transform: rotate(-7deg); }
 .step-blue { background: var(--blue); }
 .step-orange { background: var(--orange); }
+.clear-button { width: clamp(29px, 4.3vh, 36px); height: clamp(29px, 4.3vh, 36px); margin-left: auto; display: grid; place-items: center; flex: 0 0 auto; padding: 0; border: 1px solid #dce4f0; border-radius: 50%; color: #667791; background: #fff; font-size: clamp(13px, 2vh, 17px); font-weight: 900; cursor: pointer; transition: transform .15s ease, opacity .15s ease; }
+.clear-button:hover:not(:disabled) { transform: translateY(-1px); border-color: #a9bef5; }
+.clear-button:disabled { opacity: .35; cursor: default; }
+.clear-button:focus-visible { outline: 3px solid #273653; outline-offset: 2px; }
 .choice-grid { min-height: 0; display: grid; grid-auto-rows: minmax(0, 1fr); gap: clamp(6px, 1.1vh, 10px); }
 .initials-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); }
 .finals-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); }
@@ -88,9 +92,7 @@ button { font: inherit; -webkit-tap-highlight-color: transparent; }
 .final-chip:hover:not(.unavailable) { border-color: #ffc083; }
 .final-chip.selected { color: #fff; background: var(--orange); border-color: var(--orange-dark); box-shadow: 0 4px 0 #d9731d; transform: translateY(-2px); }
 /* 三拼音节里当介母的 i、u、ü：比选中的韵母浅一档；刚点完、等着接韵母时一闪一闪。 */
-.final-chip.medial, .final-chip.pending { color: var(--orange-dark); background: #ffe2c2; border-color: var(--orange); box-shadow: 0 3px 0 #fbdcb8; transform: none; }
-.final-chip.pending { animation: pending-pulse .6s ease-in-out infinite alternate; }
-@keyframes pending-pulse { from { box-shadow: 0 0 0 0 rgba(255, 159, 67, .6); } to { box-shadow: 0 0 0 7px rgba(255, 159, 67, 0); } }
+.final-chip.medial { color: var(--orange-dark); background: #ffe2c2; border-color: var(--orange); box-shadow: 0 3px 0 #fbdcb8; transform: none; }
 .sound-chip.unavailable { color: #b6bfcc; background: #f3f5f8; box-shadow: none; opacity: .72; }
 .sound-chip:focus-visible, .tone-picker button:focus-visible, .result-actions button:focus-visible { outline: 3px solid #273653; outline-offset: 2px; }
 
@@ -114,6 +116,7 @@ button { font: inherit; -webkit-tap-highlight-color: transparent; }
 .formula-part:disabled { cursor: default; }
 .formula-part:focus-visible { outline: 3px solid #273653; outline-offset: 2px; }
 .formula span { min-width: .6em; color: #536b94; font-size: 1em; font-weight: 900; }
+.formula span.empty { color: #c5cfdd; }
 .formula b { color: #b3bfd1; font-size: .55em; }
 .formula strong { min-width: 1.5em; color: #ee7d2e; font-size: 1.7em; line-height: 1; text-shadow: 0 .08em 0 #ffe4cc; }
 .tone-picker { display: flex; justify-content: center; flex-wrap: wrap; gap: clamp(4px, .9vh, 8px); }
@@ -149,7 +152,7 @@ button { font: inherit; -webkit-tap-highlight-color: transparent; }
   .content { width: calc(100% - 12px); min-height: auto; padding: 7px 0; grid-template-rows: auto auto; align-content: start; gap: 7px; }
   .learning-card { grid-template-rows: none; padding: 10px 8px; row-gap: 8px; border-radius: 16px; }
   .section-heading { gap: 6px; }
-  .step { width: 26px; height: 26px; font-size: 13px; }
+  .step, .clear-button { width: 26px; height: 26px; font-size: 13px; }
   .choice-grid { grid-auto-rows: auto; gap: 6px; }
   .sound-chip { min-height: clamp(46px, 6.4vh, 60px); padding: 0; border-radius: 10px; font-size: clamp(14px, 4.2vw, 17px); }
   .initial-chip.selected, .final-chip.selected { box-shadow: 0 3px 0 currentColor; transform: translateY(-1px); }
@@ -174,7 +177,7 @@ button { font: inherit; -webkit-tap-highlight-color: transparent; }
   }
   .learning-card { padding: clamp(6px, 1.8vh, 10px); row-gap: clamp(3px, 1vh, 6px); border-radius: 15px; }
   .section-heading { gap: 5px; }
-  .step { width: clamp(20px, 6vh, 26px); height: clamp(20px, 6vh, 26px); font-size: 12px; }
+  .step, .clear-button { width: clamp(20px, 6vh, 26px); height: clamp(20px, 6vh, 26px); font-size: 12px; }
   .choice-grid { gap: clamp(3px, 1.2vh, 6px); }
   .sound-chip { padding: 1px; border-width: 1px; border-radius: 8px; font-size: clamp(12px, 4.2vh, 18px); }
   .initial-chip.selected, .final-chip.selected { box-shadow: 0 2px 0 currentColor; transform: translateY(-1px); }
