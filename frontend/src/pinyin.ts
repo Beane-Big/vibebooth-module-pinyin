@@ -5,13 +5,16 @@ export const initials: InitialOption[] = [
   ..."b p m f d t n l g k h j q x zh ch sh r z c s y w".split(" ").map((value) => ({ label: value, value })),
 ];
 
+// 和课本的韵母表一样：6 个单韵母、9 个复韵母、9 个鼻韵母。uang 这类三拼的部分由“介母 + 韵母”拼出来。
 export const finals = [
   "a", "o", "e", "i", "u", "ü", "ai", "ei", "ui", "ao", "ou", "iu", "ie", "üe", "er",
-  "ia", "ua", "uo", "iao", "uai", "an", "en", "in", "un", "ün", "ian", "uan", "üan",
-  "ang", "eng", "ing", "ong", "iang", "uang", "iong",
+  "an", "en", "in", "un", "ün", "ang", "eng", "ing", "ong",
 ] as const;
 
-// 按普通话音节表列出可拼组合；不存在的组合直接在界面中禁用。
+// 三拼音节里夹在声母和韵母中间的介母。
+export const medials = ["i", "u", "ü"] as const;
+
+// 按普通话音节表列出可拼组合（韵母写成介母和韵母连在一起的样子，如 uang），不存在的组合在界面中显示成灰色。
 const validCombinations: Record<string, string[]> = {
   "": ["a", "o", "e", "ai", "ei", "ao", "ou", "an", "en", "ang", "eng", "er"],
   b: ["a", "o", "i", "u", "ai", "ei", "ao", "ie", "iao", "an", "en", "in", "ian", "ang", "eng", "ing"],
@@ -79,15 +82,32 @@ function addTone(syllable: string, tone: number): string {
 export function makeSyllable(initial: string, final: string, tone = 0): string { return addTone(combine(initial, final), tone); }
 
 // 三拼音节：声母后面的 i、u、ü 是介母，要和后面的韵母分开拼，例如 h + u + ang。
-// 没有声母或者声母是 y、w 时不拆。
+// 没有声母或者声母是 y、w 时不拆；只有 yuan 例外，韵母表里没有 üan，所以拆成 y + ü + an。
 const medialFinals: Record<string, [string, string]> = {
   ia: ["i", "a"], ua: ["u", "a"], uo: ["u", "o"], iao: ["i", "ao"], uai: ["u", "ai"], ian: ["i", "an"],
   uan: ["u", "an"], üan: ["ü", "an"], iang: ["i", "ang"], uang: ["u", "ang"], iong: ["i", "ong"],
 };
 
 export function splitFinal(initial: string, final: string): { medial?: string; rest: string } {
-  const parts = initial && initial !== "y" && initial !== "w" ? medialFinals[final] : undefined;
+  const splits = initial && initial !== "w" && (initial !== "y" || final === "üan");
+  const parts = splits ? medialFinals[final] : undefined;
   return parts ? { medial: parts[0], rest: parts[1] } : { rest: final };
+}
+
+// 介母和韵母连起来，例如 u + ang 得到 uang；不是三拼的组合返回 undefined。
+export function joinFinal(medial: string, final: string): string | undefined {
+  if (!medial) return final;
+  return Object.keys(medialFinals).find((joined) => medialFinals[joined][0] === medial && medialFinals[joined][1] === final);
+}
+
+// 声母、介母（可以不选）、韵母能不能拼成普通话音节。
+export function canCombine(initial: string, medial: string, final: string): boolean {
+  const joined = joinFinal(medial, final);
+  return !!joined && validFinalsFor(initial).includes(joined) && (splitFinal(initial, joined).medial ?? "") === medial;
+}
+
+export function isMedialAvailable(initial: string, medial: string): boolean {
+  return finals.some((final) => canCombine(initial, medial, final));
 }
 
 export function isWholeSyllable(initial: string, final: string): boolean { return wholeSyllables.has(combine(initial, final)); }

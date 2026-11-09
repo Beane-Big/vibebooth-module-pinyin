@@ -1,24 +1,25 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { finals, initials, isWholeSyllable, makeSyllable, randomCombination, splitFinal, toneOptions, validFinalsFor } from "./pinyin";
+import { canCombine, finals, initials, isMedialAvailable, isWholeSyllable, joinFinal, makeSyllable, medials, randomCombination, splitFinal, toneOptions } from "./pinyin";
 import { clipUrl, finalClip, initialClip, medialClip, speechSteps, speechText, syllableClip, type SpeechPart, type SpeechStep } from "./speech";
 
 const selectedInitial = ref("b");
+// 介母只在三拼音节里用，空字符串表示不选。selectedFinal 是韵母表里的韵母，和介母连起来才是完整的韵母（u + ang = uang）。
+const selectedMedial = ref("");
 const selectedFinal = ref("a");
 const selectedTone = ref(1);
 const speechMessage = ref("");
 const isSpeaking = ref(false);
 const playingPart = ref<SpeechPart | null>(null);
 
-const allowedFinals = computed(() => new Set(validFinalsFor(selectedInitial.value)));
-const isValid = computed(() => allowedFinals.value.has(selectedFinal.value));
-const isWhole = computed(() => isValid.value && isWholeSyllable(selectedInitial.value, selectedFinal.value));
-const syllable = computed(() => isValid.value ? makeSyllable(selectedInitial.value, selectedFinal.value, selectedTone.value) : "—");
-const spelling = computed(() => isValid.value ? speechText(selectedInitial.value, selectedFinal.value, selectedTone.value) : "");
+const fullFinal = computed(() => joinFinal(selectedMedial.value, selectedFinal.value) ?? "");
+const isValid = computed(() => canCombine(selectedInitial.value, selectedMedial.value, selectedFinal.value));
+const isWhole = computed(() => isValid.value && isWholeSyllable(selectedInitial.value, fullFinal.value));
+const syllable = computed(() => isValid.value ? makeSyllable(selectedInitial.value, fullFinal.value, selectedTone.value) : "—");
+const spelling = computed(() => isValid.value ? speechText(selectedInitial.value, fullFinal.value, selectedTone.value) : "");
 const initialSound = computed(() => initialClip(selectedInitial.value));
-// 三拼音节拆成介母和韵母两部分显示，例如 uang 拆成 u 和 ang。
-const finalParts = computed(() => splitFinal(selectedInitial.value, selectedFinal.value));
-const finalSound = computed(() => isValid.value ? finalClip(finalParts.value.rest, selectedTone.value) : undefined);
+const finalParts = computed(() => ({ medial: selectedMedial.value || undefined, rest: selectedFinal.value }));
+const finalSound = computed(() => isValid.value ? finalClip(selectedFinal.value, selectedTone.value) : undefined);
 
 // 每次点“听一听”都换一轮播放，上一轮没播完的录音直接停掉。
 // 一直用同一个播放器换录音：iPad 上只有点按时开始播放的播放器，后面才能接着自动播放。
@@ -53,21 +54,39 @@ onBeforeUnmount(() => {
   if ("speechSynthesis" in window) window.speechSynthesis.removeEventListener("voiceschanged", loadChineseVoice);
 });
 
-// 点声母、韵母按钮时选中并读出来；“无”声母和 ong 没有单独的录音，只选中不读。
+// 换了声母或介母后，原来的介母、韵母拼不上时，换成第一个能拼上的。
+function keepCombinable() {
+  if (!isMedialAvailable(selectedInitial.value, selectedMedial.value)) selectedMedial.value = "";
+  if (!canCombine(selectedInitial.value, selectedMedial.value, selectedFinal.value)) {
+    selectedFinal.value = finals.find((final) => canCombine(selectedInitial.value, selectedMedial.value, final)) ?? selectedFinal.value;
+  }
+}
+
+// 点声母、介母、韵母按钮时选中并读出来；“无”声母和 ong 没有单独的录音，只选中不读。
 function selectInitial(initial: string) {
   stopSpeaking();
-  selectedInitial.value = initial;
-  if (!validFinalsFor(initial).includes(selectedFinal.value)) selectedFinal.value = validFinalsFor(initial)[0];
   speechMessage.value = "";
+  selectedInitial.value = initial;
+  keepCombinable();
   const clip = initialClip(initial);
   if (clip) play([{ clip }]);
 }
 
-// 灰色的韵母不能和当前声母组队，点了只读，不选中。
+// 灰色的介母、韵母不能和前面选的组队，点了只读，不选中。
+function selectMedial(medial: string) {
+  stopSpeaking();
+  speechMessage.value = "";
+  if (isMedialAvailable(selectedInitial.value, medial)) {
+    selectedMedial.value = medial;
+    keepCombinable();
+  }
+  if (medial) play([{ clip: medialClip(medial) }]);
+}
+
 function selectFinal(final: string) {
   stopSpeaking();
   speechMessage.value = "";
-  if (allowedFinals.value.has(final)) selectedFinal.value = final;
+  if (canCombine(selectedInitial.value, selectedMedial.value, final)) selectedFinal.value = final;
   const clip = finalClip(final, selectedTone.value);
   if (clip) play([{ clip }]);
 }
@@ -81,8 +100,10 @@ function selectTone(tone: number) {
 function surpriseMe() {
   stopSpeaking();
   const next = randomCombination();
+  const { medial, rest } = splitFinal(next.initial, next.final);
   selectedInitial.value = next.initial;
-  selectedFinal.value = next.final;
+  selectedMedial.value = medial ?? "";
+  selectedFinal.value = rest;
   selectedTone.value = Math.floor(Math.random() * 4) + 1;
   speechMessage.value = "";
 }
@@ -138,7 +159,7 @@ async function play(steps: SpeechStep[]) {
 }
 
 function speak() {
-  if (isValid.value) play(speechSteps(selectedInitial.value, selectedFinal.value, selectedTone.value));
+  if (isValid.value) play(speechSteps(selectedInitial.value, fullFinal.value, selectedTone.value));
 }
 
 // 点公式里的声母、韵母或者音节，只读这一部分。
@@ -148,7 +169,7 @@ function speakPart(part: SpeechPart) {
   const clip = part === "initial" ? initialSound.value
     : part === "medial" ? (medial ? medialClip(medial) : undefined)
     : part === "final" ? finalSound.value
-    : syllableClip(selectedInitial.value, selectedFinal.value, selectedTone.value);
+    : syllableClip(selectedInitial.value, fullFinal.value, selectedTone.value);
   if (clip) play([{ clip, part }]);
 }
 </script>
@@ -156,7 +177,7 @@ function speakPart(part: SpeechPart) {
 <template>
   <div class="app-shell">
     <main class="content">
-      <section class="learning-card" aria-label="选声母和韵母">
+      <section class="learning-card" aria-label="选声母、介母和韵母">
         <div class="picker-column initials-column">
           <div class="section-heading"><span class="step step-blue">1</span><h2>选声母</h2></div>
           <div class="choice-grid initials-grid" role="group" aria-label="选择声母">
@@ -164,12 +185,19 @@ function speakPart(part: SpeechPart) {
           </div>
         </div>
 
-        <div class="picker-column finals-column">
-          <div class="section-heading"><span class="step step-orange">2</span><h2>选韵母</h2></div>
-          <div class="choice-grid finals-grid" role="group" aria-label="选择韵母">
-            <button v-for="final in finals" :key="final" class="sound-chip final-chip" :class="{ selected: selectedFinal === final, unavailable: !allowedFinals.has(final) }" type="button" :aria-pressed="selectedFinal === final" @click="selectFinal(final)">{{ final }}</button>
+        <div class="picker-column medials-column">
+          <div class="section-heading"><span class="step step-green">2</span><h2>选介母</h2><p>三拼音节才用，比如 h + u + ang</p></div>
+          <div class="choice-grid medials-grid" role="group" aria-label="选择介母">
+            <button v-for="medial in ['', ...medials]" :key="medial || 'none'" class="sound-chip medial-chip" :class="{ selected: selectedMedial === medial, unavailable: !isMedialAvailable(selectedInitial, medial) }" type="button" :aria-pressed="selectedMedial === medial" @click="selectMedial(medial)">{{ medial || "无" }}</button>
           </div>
-          <p class="helper-text"><span aria-hidden="true">💡</span> 灰色的韵母不能和这个声母组队，点一下可以听它怎么读</p>
+        </div>
+
+        <div class="picker-column finals-column">
+          <div class="section-heading"><span class="step step-orange">3</span><h2>选韵母</h2></div>
+          <div class="choice-grid finals-grid" role="group" aria-label="选择韵母">
+            <button v-for="final in finals" :key="final" class="sound-chip final-chip" :class="{ selected: selectedFinal === final, unavailable: !canCombine(selectedInitial, selectedMedial, final) }" type="button" :aria-pressed="selectedFinal === final" @click="selectFinal(final)">{{ final }}</button>
+          </div>
+          <p class="helper-text"><span aria-hidden="true">💡</span> 灰色的不能和前面选的组队，点一下可以听它怎么读</p>
         </div>
       </section>
 
