@@ -81,14 +81,14 @@ button { font: inherit; -webkit-tap-highlight-color: transparent; }
   line-height: 1;
   transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
 }
-.sound-chip:hover:not(:disabled) { transform: translateY(-1px); }
+.sound-chip:hover:not(.unavailable) { transform: translateY(-1px); }
 .initial-chip { background: var(--blue-soft); box-shadow: 0 3px 0 #d3dff8; }
 .initial-chip:hover:not(:disabled) { border-color: #a9bef5; }
 .initial-chip.selected { color: #fff; background: var(--blue); border-color: var(--blue-dark); box-shadow: 0 4px 0 #355abc; transform: translateY(-2px); }
 .final-chip { background: var(--orange-soft); box-shadow: 0 3px 0 #fbdcb8; }
-.final-chip:hover:not(:disabled) { border-color: #ffc083; }
+.final-chip:hover:not(.unavailable) { border-color: #ffc083; }
 .final-chip.selected { color: #fff; background: var(--orange); border-color: var(--orange-dark); box-shadow: 0 4px 0 #d9731d; transform: translateY(-2px); }
-.sound-chip:disabled { color: #b6bfcc; background: #f3f5f8; box-shadow: none; cursor: not-allowed; opacity: .72; }
+.sound-chip.unavailable { color: #b6bfcc; background: #f3f5f8; box-shadow: none; opacity: .72; }
 .sound-chip:focus-visible, .tone-picker button:focus-visible, .result-actions button:focus-visible { outline: 3px solid #273653; outline-offset: 2px; }
 .helper-text { margin: clamp(6px, 1vh, 10px) 0 0; color: #8794a8; font-size: clamp(9px, 1.35vh, 11px); line-height: 1.2; }
 
@@ -100,19 +100,21 @@ button { font: inherit; -webkit-tap-highlight-color: transparent; }
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  container-type: inline-size;
   background: linear-gradient(135deg, #f1f7ff 0%, #fff 52%, #fff7eb 100%);
 }
 .result-main { position: relative; z-index: 1; width: min(100%, 590px); text-align: center; }
 .result-label { color: #7586a1; font-size: clamp(11px, 1.7vh, 14px); font-weight: 800; letter-spacing: .12em; }
-.formula { margin: clamp(3px, .8vh, 7px) 0 clamp(7px, 1.2vh, 12px); display: flex; align-items: baseline; justify-content: center; gap: clamp(6px, 1.4vw, 16px); }
-.formula-part { padding: 0 clamp(3px, .5vw, 6px); border: 0; border-radius: 12px; color: inherit; background: transparent; cursor: pointer; transition: background .15s ease, transform .15s ease; }
+/* 公式里的字号都跟着 .formula 的字号走；字号同时受卡片宽度限制，三拼音节（zh + u + ang = zhuāng）也能放得下。 */
+.formula { margin: clamp(3px, .8vh, 7px) 0 clamp(7px, 1.2vh, 12px); display: flex; align-items: baseline; justify-content: center; gap: .3em; font-size: min(clamp(26px, 5.6vh, 52px), 6.4cqi); }
+.formula-part { padding: 0 .12em; border: 0; border-radius: 12px; color: inherit; background: transparent; cursor: pointer; transition: background .15s ease, transform .15s ease; }
 .formula-part:hover:not(:disabled) { background: rgba(85, 126, 232, .08); }
 .formula-part.playing { background: #eaf0ff; transform: translateY(-2px); }
 .formula-part:disabled { cursor: default; }
 .formula-part:focus-visible { outline: 3px solid #273653; outline-offset: 2px; }
-.formula span { min-width: 32px; color: #536b94; font-size: clamp(26px, 5.6vh, 52px); font-weight: 900; }
-.formula b { color: #b3bfd1; font-size: clamp(16px, 3vh, 28px); }
-.formula strong { min-width: 76px; color: #ee7d2e; font-size: clamp(44px, 9.5vh, 88px); line-height: 1; text-shadow: 0 4px 0 #ffe4cc; }
+.formula span { min-width: .6em; color: #536b94; font-size: 1em; font-weight: 900; }
+.formula b { color: #b3bfd1; font-size: .55em; }
+.formula strong { min-width: 1.5em; color: #ee7d2e; font-size: 1.7em; line-height: 1; text-shadow: 0 .08em 0 #ffe4cc; }
 .tone-picker { display: flex; justify-content: center; flex-wrap: wrap; gap: clamp(4px, .9vh, 8px); }
 .tone-picker button { padding: clamp(5px, 1vh, 9px) clamp(6px, .8vw, 12px); border: 1px solid #dce4f0; border-radius: 999px; color: #667791; background: #fff; font-size: clamp(11px, 1.8vh, 15px); font-weight: 700; cursor: pointer; }
 .tone-picker button span { margin-right: 3px; font-size: clamp(12px, 2.1vh, 17px); font-weight: 900; }
@@ -154,10 +156,7 @@ button { font: inherit; -webkit-tap-highlight-color: transparent; }
   .initial-chip.selected, .final-chip.selected { box-shadow: 0 3px 0 currentColor; transform: translateY(-1px); }
   .helper-text { margin-top: 6px; font-size: 10px; }
   .result-card { min-height: 158px; padding: 9px 8px; border-radius: 16px; }
-  .formula { margin: 1px 0 5px; gap: 6px; }
-  .formula span { min-width: 27px; font-size: clamp(20px, 3.6vh, 28px); }
-  .formula b { font-size: 14px; }
-  .formula strong { min-width: 62px; font-size: clamp(35px, 5.8vh, 46px); text-shadow: 0 3px 0 #ffe4cc; }
+  .formula { margin: 1px 0 5px; font-size: min(clamp(20px, 3.6vh, 28px), 6.4cqi); }
   .tone-picker { gap: 3px; flex-wrap: nowrap; }
   .tone-picker button { padding: 3px 5px; font-size: clamp(8px, 1.25vh, 10px); }
   .tone-picker button span { margin-right: 2px; font-size: 10px; }
@@ -185,10 +184,7 @@ button { font: inherit; -webkit-tap-highlight-color: transparent; }
   .helper-text { margin-top: 3px; font-size: 8px; }
   .result-card { padding: 7px; border-radius: 15px; }
   .result-label { font-size: 8px; }
-  .formula { margin: 2px 0 6px; gap: 5px; }
-  .formula span { min-width: 24px; font-size: clamp(18px, 6.5vh, 26px); }
-  .formula b { font-size: 12px; }
-  .formula strong { min-width: 55px; font-size: clamp(33px, 11vh, 45px); text-shadow: 0 3px 0 #ffe4cc; }
+  .formula { margin: 2px 0 6px; font-size: min(clamp(18px, 6.5vh, 26px), 6.4cqi); }
   .tone-picker { gap: 3px; }
   .tone-picker button { padding: 3px 5px; font-size: 8px; }
   .tone-picker button span { font-size: 9px; }

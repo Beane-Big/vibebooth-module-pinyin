@@ -78,6 +78,18 @@ function addTone(syllable: string, tone: number): string {
 
 export function makeSyllable(initial: string, final: string, tone = 0): string { return addTone(combine(initial, final), tone); }
 
+// 三拼音节：声母后面的 i、u、ü 是介母，要和后面的韵母分开拼，例如 h + u + ang。
+// 没有声母或者声母是 y、w 时不拆。
+const medialFinals: Record<string, [string, string]> = {
+  ia: ["i", "a"], ua: ["u", "a"], uo: ["u", "o"], iao: ["i", "ao"], uai: ["u", "ai"], ian: ["i", "an"],
+  uan: ["u", "an"], üan: ["ü", "an"], iang: ["i", "ang"], uang: ["u", "ang"], iong: ["i", "ong"],
+};
+
+export function splitFinal(initial: string, final: string): { medial?: string; rest: string } {
+  const parts = initial && initial !== "y" && initial !== "w" ? medialFinals[final] : undefined;
+  return parts ? { medial: parts[0], rest: parts[1] } : { rest: final };
+}
+
 export function isWholeSyllable(initial: string, final: string): boolean { return wholeSyllables.has(combine(initial, final)); }
 
 export function randomCombination(): { initial: string; final: string } {
