@@ -3,14 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { canCombine, finals, initials, isMedialAvailable, joinFinal, makeSyllable, medials, randomCombination, splitFinal, toneOptions } from "./pinyin";
 import { clipUrl, finalClip, initialClip, medialClip, speechSteps, speechText, syllableClip, type SpeechPart, type SpeechStep } from "./speech";
 
-const selectedInitial = ref("b");
-// 介母只在三拼音节里用，空字符串表示没有。selectedFinal 是韵母表里的韵母，和介母连起来才是完整的韵母（u + ang = uang）。
+// null 表示声母清空了还没选；空字符串是“无”声母。
+const selectedInitial = ref<string | null>("b");
+// 介母只在三拼音节里用，空字符串表示没有。selectedFinal 是韵母表里的韵母，空字符串表示清空了；和介母连起来才是完整的韵母（u + ang = uang）。
+// 三拼音节在韵母表里连着点：选了 i、u、ü 之后再点能接上的韵母，就拼成 uang 这样的韵母。
 const selectedMedial = ref("");
-// 三拼音节在韵母表里连着点：点了 i、u、ü 之后的一小段时间里再点韵母，就拼成 uang 这样的韵母。
-// 这段时间里 pendingMedial 记着刚点的介母，超时就当只点了 u。
-const MEDIAL_WINDOW_MS = 2000;
-const pendingMedial = ref("");
-let pendingTimer: ReturnType<typeof setTimeout> | undefined;
 const selectedFinal = ref("a");
 const selectedTone = ref(1);
 const speechMessage = ref("");
@@ -18,30 +15,31 @@ const isSpeaking = ref(false);
 const playingPart = ref<SpeechPart | null>(null);
 
 const fullFinal = computed(() => joinFinal(selectedMedial.value, selectedFinal.value) ?? "");
-const isValid = computed(() => canCombine(selectedInitial.value, selectedMedial.value, selectedFinal.value));
-const syllable = computed(() => isValid.value ? makeSyllable(selectedInitial.value, fullFinal.value, selectedTone.value) : "—");
-const spelling = computed(() => isValid.value ? speechText(selectedInitial.value, fullFinal.value, selectedTone.value) : "");
-const initialSound = computed(() => initialClip(selectedInitial.value));
+const isValid = computed(() => selectedInitial.value !== null && canCombine(selectedInitial.value, selectedMedial.value, selectedFinal.value));
+const syllable = computed(() => isValid.value ? makeSyllable(selectedInitial.value!, fullFinal.value, selectedTone.value) : "—");
+const spelling = computed(() => isValid.value ? speechText(selectedInitial.value!, fullFinal.value, selectedTone.value) : "");
+const initialSound = computed(() => selectedInitial.value ? initialClip(selectedInitial.value) : undefined);
+// 只选了 i、u、ü，后面还能接韵母拼三拼。
+const loneMedial = computed(() => !selectedMedial.value && (medials as readonly string[]).includes(selectedFinal.value) ? selectedFinal.value : "");
+
+// 声母清空时，只要有一个声母能拼上就算能拼。
+function combinable(medial: string, final: string): boolean {
+  const initial = selectedInitial.value;
+  return initial === null ? initials.some((option) => canCombine(option.value, medial, final)) : canCombine(initial, medial, final);
+}
+
+function medialAvailable(medial: string): boolean {
+  const initial = selectedInitial.value;
+  return initial === null ? initials.some((option) => isMedialAvailable(option.value, medial)) : isMedialAvailable(initial, medial);
+}
 const finalParts = computed(() => ({ medial: selectedMedial.value || undefined, rest: selectedFinal.value }));
 const finalSound = computed(() => isValid.value ? finalClip(selectedFinal.value, selectedTone.value) : undefined);
 
-// 韵母按钮能不能点亮：等着接韵母时，只亮能接在这个介母后面的；平时亮能直接组队的、能当介母的 i、u、ü，以及当前三拼里的韵母（如 zuo 的 o）。
+// 韵母按钮能不能点亮：能直接组队的、能当介母的 i、u、ü、能接在刚选的介母后面的，以及当前三拼里的韵母（如 zuo 的 o）。
 function isFinalAvailable(final: string): boolean {
-  const initial = selectedInitial.value;
-  if (pendingMedial.value) return final === pendingMedial.value || canCombine(initial, pendingMedial.value, final);
   if (final === selectedFinal.value && isValid.value) return true;
-  return canCombine(initial, "", final) || ((medials as readonly string[]).includes(final) && isMedialAvailable(initial, final));
-}
-
-function clearPending() {
-  clearTimeout(pendingTimer);
-  pendingMedial.value = "";
-}
-
-function startPending(medial: string) {
-  clearPending();
-  pendingMedial.value = medial;
-  pendingTimer = setTimeout(clearPending, MEDIAL_WINDOW_MS);
+  if (loneMedial.value && combinable(loneMedial.value, final)) return true;
+  return combinable("", final) || ((medials as readonly string[]).includes(final) && medialAvailable(final));
 }
 
 // 每次点“听一听”都换一轮播放，上一轮没播完的录音直接停掉。
@@ -74,22 +72,21 @@ function stopSpeaking() {
 
 onBeforeUnmount(() => {
   stopSpeaking();
-  clearPending();
   if ("speechSynthesis" in window) window.speechSynthesis.removeEventListener("voiceschanged", loadChineseVoice);
 });
 
-// 换了声母后，原来的介母、韵母拼不上时，换成第一个能拼上的。
+// 换了声母后，原来的介母、韵母拼不上时，换成第一个能拼上的；韵母清空了就不补。只选了 i、u、ü 也算拼得上，后面还能接韵母。
 function keepCombinable() {
-  if (!isMedialAvailable(selectedInitial.value, selectedMedial.value)) selectedMedial.value = "";
-  if (!canCombine(selectedInitial.value, selectedMedial.value, selectedFinal.value)) {
-    selectedFinal.value = finals.find((final) => canCombine(selectedInitial.value, selectedMedial.value, final)) ?? selectedFinal.value;
+  if (!selectedFinal.value || (loneMedial.value && medialAvailable(loneMedial.value))) return;
+  if (!medialAvailable(selectedMedial.value)) selectedMedial.value = "";
+  if (!combinable(selectedMedial.value, selectedFinal.value)) {
+    selectedFinal.value = finals.find((final) => combinable(selectedMedial.value, final)) ?? selectedFinal.value;
   }
 }
 
 // 点声母、韵母按钮时选中并读出来；“无”声母和 ong 没有单独的录音，只选中不读。
 function selectInitial(initial: string) {
   stopSpeaking();
-  clearPending();
   speechMessage.value = "";
   selectedInitial.value = initial;
   keepCombinable();
@@ -97,25 +94,34 @@ function selectInitial(initial: string) {
   if (clip) play([{ clip }]);
 }
 
-// 刚点过 i、u、ü 又点了能接上的韵母，拼成三拼；否则按单个韵母选中。灰色的韵母点了只读，不选中。
+// 选了 i、u、ü 之后再点能接上的韵母，拼成三拼；否则换成这个韵母。灰色的韵母点了只读，不选中。
 function selectFinal(final: string) {
   stopSpeaking();
   speechMessage.value = "";
-  const initial = selectedInitial.value;
-  const medial = pendingMedial.value;
-  clearPending();
-  if (medial && canCombine(initial, medial, final)) {
+  const medial = loneMedial.value;
+  if (medial && combinable(medial, final)) {
     selectedMedial.value = medial;
     selectedFinal.value = final;
-  } else {
-    if (canCombine(initial, "", final)) {
-      selectedMedial.value = "";
-      selectedFinal.value = final;
-    }
-    if ((medials as readonly string[]).includes(final) && isMedialAvailable(initial, final)) startPending(final);
+  } else if (isFinalAvailable(final)) {
+    selectedMedial.value = "";
+    selectedFinal.value = final;
   }
   const clip = finalClip(final, selectedTone.value);
   if (clip) play([{ clip }]);
+}
+
+// 清空后可以重新搭配。
+function clearInitial() {
+  stopSpeaking();
+  speechMessage.value = "";
+  selectedInitial.value = null;
+}
+
+function clearFinal() {
+  stopSpeaking();
+  speechMessage.value = "";
+  selectedMedial.value = "";
+  selectedFinal.value = "";
 }
 
 function selectTone(tone: number) {
@@ -126,7 +132,6 @@ function selectTone(tone: number) {
 
 function surpriseMe() {
   stopSpeaking();
-  clearPending();
   const next = randomCombination();
   const { medial, rest } = splitFinal(next.initial, next.final);
   selectedInitial.value = next.initial;
@@ -187,7 +192,7 @@ async function play(steps: SpeechStep[]) {
 }
 
 function speak() {
-  if (isValid.value) play(speechSteps(selectedInitial.value, fullFinal.value, selectedTone.value));
+  if (isValid.value) play(speechSteps(selectedInitial.value!, fullFinal.value, selectedTone.value));
 }
 
 // 点公式里的声母、韵母或者音节，只读这一部分。
@@ -197,7 +202,7 @@ function speakPart(part: SpeechPart) {
   const clip = part === "initial" ? initialSound.value
     : part === "medial" ? (medial ? medialClip(medial) : undefined)
     : part === "final" ? finalSound.value
-    : syllableClip(selectedInitial.value, fullFinal.value, selectedTone.value);
+    : syllableClip(selectedInitial.value!, fullFinal.value, selectedTone.value);
   if (clip) play([{ clip, part }]);
 }
 </script>
@@ -207,16 +212,22 @@ function speakPart(part: SpeechPart) {
     <main class="content">
       <section class="learning-card" aria-label="选声母和韵母">
         <div class="picker-column initials-column">
-          <div class="section-heading" aria-hidden="true"><span class="step step-blue">1</span></div>
+          <div class="section-heading">
+            <span class="step step-blue" aria-hidden="true">1</span>
+            <button class="clear-button" type="button" :disabled="selectedInitial === null" aria-label="清空声母" @click="clearInitial"><span aria-hidden="true">✕</span></button>
+          </div>
           <div class="choice-grid initials-grid" role="group" aria-label="选择声母">
             <button v-for="initial in initials" :key="initial.value || 'none'" class="sound-chip initial-chip" :class="{ selected: selectedInitial === initial.value }" type="button" :aria-pressed="selectedInitial === initial.value" @click="selectInitial(initial.value)">{{ initial.label }}</button>
           </div>
         </div>
 
         <div class="picker-column finals-column">
-          <div class="section-heading" aria-hidden="true"><span class="step step-orange">2</span></div>
+          <div class="section-heading">
+            <span class="step step-orange" aria-hidden="true">2</span>
+            <button class="clear-button" type="button" :disabled="!selectedFinal" aria-label="清空韵母" @click="clearFinal"><span aria-hidden="true">✕</span></button>
+          </div>
           <div class="choice-grid finals-grid" role="group" aria-label="选择韵母，三拼音节先点 i、u、ü 再点韵母">
-            <button v-for="final in finals" :key="final" class="sound-chip final-chip" :class="{ selected: selectedFinal === final, medial: !pendingMedial && selectedMedial === final, pending: pendingMedial === final, unavailable: !isFinalAvailable(final) }" type="button" :aria-pressed="selectedFinal === final" @click="selectFinal(final)">{{ final }}</button>
+            <button v-for="final in finals" :key="final" class="sound-chip final-chip" :class="{ selected: selectedFinal === final, medial: selectedMedial === final, unavailable: !isFinalAvailable(final) }" type="button" :aria-pressed="selectedFinal === final" @click="selectFinal(final)">{{ final }}</button>
           </div>
         </div>
       </section>
@@ -225,13 +236,13 @@ function speakPart(part: SpeechPart) {
         <div class="result-decoration stars-left" aria-hidden="true">✦ · ✧</div>
         <div class="result-main">
           <div class="formula">
-            <button class="formula-part" :class="{ playing: playingPart === 'initial' }" type="button" :disabled="!initialSound" :aria-label="`听声母 ${selectedInitial}`" @click="speakPart('initial')"><span>{{ selectedInitial || "∅" }}</span></button>
+            <button class="formula-part" :class="{ playing: playingPart === 'initial' }" type="button" :disabled="!initialSound" :aria-label="`听声母 ${selectedInitial ?? ''}`" @click="speakPart('initial')"><span :class="{ empty: selectedInitial === null }">{{ selectedInitial === null ? "?" : selectedInitial || "∅" }}</span></button>
             <template v-if="finalParts.medial">
               <b>＋</b>
               <button class="formula-part" :class="{ playing: playingPart === 'medial' }" type="button" :disabled="!isValid" :aria-label="`听介母 ${finalParts.medial}`" @click="speakPart('medial')"><span>{{ finalParts.medial }}</span></button>
             </template>
             <b>＋</b>
-            <button class="formula-part" :class="{ playing: playingPart === 'final' }" type="button" :disabled="!finalSound" :aria-label="`听韵母 ${finalParts.rest}`" @click="speakPart('final')"><span>{{ finalParts.rest }}</span></button>
+            <button class="formula-part" :class="{ playing: playingPart === 'final' }" type="button" :disabled="!finalSound" :aria-label="`听韵母 ${finalParts.rest}`" @click="speakPart('final')"><span :class="{ empty: !finalParts.rest }">{{ finalParts.rest || "?" }}</span></button>
             <b>＝</b>
             <button class="formula-part" :class="{ playing: playingPart === 'syllable' }" type="button" :disabled="!isValid" :aria-label="`听音节 ${syllable}`" @click="speakPart('syllable')"><strong>{{ syllable }}</strong></button>
           </div>
