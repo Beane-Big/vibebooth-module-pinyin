@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { finals, initials, isWholeSyllable, makeSyllable, randomCombination, toneOptions, validFinalsFor } from "./pinyin";
-import { clipUrl, finalClip, initialClip, speechSteps, speechText, syllableClip, type SpeechPart, type SpeechStep } from "./speech";
+import { finals, initials, isWholeSyllable, makeSyllable, randomCombination, splitFinal, toneOptions, validFinalsFor } from "./pinyin";
+import { clipUrl, finalClip, initialClip, medialClip, speechSteps, speechText, syllableClip, type SpeechPart, type SpeechStep } from "./speech";
 
 const selectedInitial = ref("b");
 const selectedFinal = ref("a");
@@ -16,7 +16,9 @@ const isWhole = computed(() => isValid.value && isWholeSyllable(selectedInitial.
 const syllable = computed(() => isValid.value ? makeSyllable(selectedInitial.value, selectedFinal.value, selectedTone.value) : "—");
 const spelling = computed(() => isValid.value ? speechText(selectedInitial.value, selectedFinal.value, selectedTone.value) : "");
 const initialSound = computed(() => initialClip(selectedInitial.value));
-const finalSound = computed(() => isValid.value ? finalClip(selectedFinal.value, selectedTone.value) : undefined);
+// 三拼音节拆成介母和韵母两部分显示，例如 uang 拆成 u 和 ang。
+const finalParts = computed(() => splitFinal(selectedInitial.value, selectedFinal.value));
+const finalSound = computed(() => isValid.value ? finalClip(finalParts.value.rest, selectedTone.value) : undefined);
 
 // 每次点“听一听”都换一轮播放，上一轮没播完的录音直接停掉。
 // 一直用同一个播放器换录音：iPad 上只有点按时开始播放的播放器，后面才能接着自动播放。
@@ -51,18 +53,23 @@ onBeforeUnmount(() => {
   if ("speechSynthesis" in window) window.speechSynthesis.removeEventListener("voiceschanged", loadChineseVoice);
 });
 
+// 点声母、韵母按钮时选中并读出来；“无”声母和 ong 没有单独的录音，只选中不读。
 function selectInitial(initial: string) {
   stopSpeaking();
   selectedInitial.value = initial;
   if (!validFinalsFor(initial).includes(selectedFinal.value)) selectedFinal.value = validFinalsFor(initial)[0];
   speechMessage.value = "";
+  const clip = initialClip(initial);
+  if (clip) play([{ clip }]);
 }
 
+// 灰色的韵母不能和当前声母组队，点了只读，不选中。
 function selectFinal(final: string) {
-  if (!allowedFinals.value.has(final)) return;
   stopSpeaking();
-  selectedFinal.value = final;
   speechMessage.value = "";
+  if (allowedFinals.value.has(final)) selectedFinal.value = final;
+  const clip = finalClip(final, selectedTone.value);
+  if (clip) play([{ clip }]);
 }
 
 function selectTone(tone: number) {
@@ -137,7 +144,11 @@ function speak() {
 // 点公式里的声母、韵母或者音节，只读这一部分。
 function speakPart(part: SpeechPart) {
   if (!isValid.value) return;
-  const clip = part === "initial" ? initialSound.value : part === "final" ? finalSound.value : syllableClip(selectedInitial.value, selectedFinal.value, selectedTone.value);
+  const medial = finalParts.value.medial;
+  const clip = part === "initial" ? initialSound.value
+    : part === "medial" ? (medial ? medialClip(medial) : undefined)
+    : part === "final" ? finalSound.value
+    : syllableClip(selectedInitial.value, selectedFinal.value, selectedTone.value);
   if (clip) play([{ clip, part }]);
 }
 </script>
@@ -156,9 +167,9 @@ function speakPart(part: SpeechPart) {
         <div class="picker-column finals-column">
           <div class="section-heading"><span class="step step-orange">2</span><h2>选韵母</h2></div>
           <div class="choice-grid finals-grid" role="group" aria-label="选择韵母">
-            <button v-for="final in finals" :key="final" class="sound-chip final-chip" :class="{ selected: selectedFinal === final }" :disabled="!allowedFinals.has(final)" type="button" :aria-pressed="selectedFinal === final" @click="selectFinal(final)">{{ final }}</button>
+            <button v-for="final in finals" :key="final" class="sound-chip final-chip" :class="{ selected: selectedFinal === final, unavailable: !allowedFinals.has(final) }" type="button" :aria-pressed="selectedFinal === final" @click="selectFinal(final)">{{ final }}</button>
           </div>
-          <p class="helper-text"><span aria-hidden="true">💡</span> 灰色的韵母不能和这个声母组队哦</p>
+          <p class="helper-text"><span aria-hidden="true">💡</span> 灰色的韵母不能和这个声母组队，点一下可以听它怎么读</p>
         </div>
       </section>
 
@@ -168,8 +179,12 @@ function speakPart(part: SpeechPart) {
           <span class="result-label">{{ isWhole ? "这是整体认读音节" : "它们组成了" }}，点一点可以单独听</span>
           <div class="formula">
             <button class="formula-part" :class="{ playing: playingPart === 'initial' }" type="button" :disabled="!initialSound" :aria-label="`听声母 ${selectedInitial}`" @click="speakPart('initial')"><span>{{ selectedInitial || "∅" }}</span></button>
+            <template v-if="finalParts.medial">
+              <b>＋</b>
+              <button class="formula-part" :class="{ playing: playingPart === 'medial' }" type="button" :disabled="!isValid" :aria-label="`听介母 ${finalParts.medial}`" @click="speakPart('medial')"><span>{{ finalParts.medial }}</span></button>
+            </template>
             <b>＋</b>
-            <button class="formula-part" :class="{ playing: playingPart === 'final' }" type="button" :disabled="!finalSound" :aria-label="`听韵母 ${selectedFinal}`" @click="speakPart('final')"><span>{{ selectedFinal }}</span></button>
+            <button class="formula-part" :class="{ playing: playingPart === 'final' }" type="button" :disabled="!finalSound" :aria-label="`听韵母 ${finalParts.rest}`" @click="speakPart('final')"><span>{{ finalParts.rest }}</span></button>
             <b>＝</b>
             <button class="formula-part" :class="{ playing: playingPart === 'syllable' }" type="button" :disabled="!isValid" :aria-label="`听音节 ${syllable}`" @click="speakPart('syllable')"><strong>{{ syllable }}</strong></button>
           </div>

@@ -1,6 +1,6 @@
 // 读音用真人录音（hugolpz/audio-cmn，CC BY-SA，来源见 public/audio/README.md），不用浏览器的语音合成：
 // 合成语音读不准带声调的拼音字母。录音文件名是“音节 + 声调数字”，ü 写成 v，例如 lv3.mp3。
-import { isWholeSyllable, makeSyllable } from "./pinyin";
+import { isWholeSyllable, makeSyllable, splitFinal } from "./pinyin";
 
 // 声母的呼读音，和课本一样：b 读“玻”，r 读“日”。
 const initialSounds: Record<string, string> = {
@@ -28,20 +28,30 @@ export function finalClip(final: string, tone: number): string | undefined {
   return clipName(finalSounds[final] ?? final, tone);
 }
 
+// 介母 i、u、ü 拼读时读成一声的“衣、乌、迂”。
+export function medialClip(medial: string): string { return clipName(finalSounds[medial], 1); }
+
 export function syllableClip(initial: string, final: string, tone: number): string { return clipName(makeSyllable(initial, final), tone); }
 
-export type SpeechPart = "initial" | "final" | "syllable";
+export type SpeechPart = "initial" | "medial" | "final" | "syllable";
 // text 是可以交给设备中文语音读的汉字：录音是单字拼起来的，连读不自然，设备有中文语音时优先用它读。
 export type SpeechStep = { clip: string; part?: SpeechPart; text?: string };
 
-// 点“听一听”时依次播放的录音：整体认读音节先说“整体认读”再读音节；没有声母时直接读；其他的“声母—韵母—音节”拼读。
+// 点“听一听”时依次播放的录音：整体认读音节先说“整体认读”再读音节；没有声母时直接读；
+// 其他的按“声母—韵母—音节”拼读，三拼音节按“声母—介母—韵母—音节”拼读。
 // part 标出这一步对应界面上的哪一部分，播放时把它亮起来。
 export function speechSteps(initial: string, final: string, tone: number): SpeechStep[] {
   const syllable: SpeechStep = { clip: syllableClip(initial, final, tone), part: "syllable" };
   if (isWholeSyllable(initial, final)) return [{ clip: wholeSyllableClip, text: "整体认读" }, syllable];
   if (!initial) return [syllable];
-  const finalSound = finalClip(final, tone);
-  return [{ clip: initialSounds[initial], part: "initial" }, ...(finalSound ? [{ clip: finalSound, part: "final" as const }] : []), syllable];
+  const { medial, rest } = splitFinal(initial, final);
+  const finalSound = finalClip(rest, tone);
+  return [
+    { clip: initialSounds[initial], part: "initial" },
+    ...(medial ? [{ clip: medialClip(medial), part: "medial" as const }] : []),
+    ...(finalSound ? [{ clip: finalSound, part: "final" as const }] : []),
+    syllable,
+  ];
 }
 
 // 和录音对应的文字，显示在“听一听”按钮下面。
@@ -49,7 +59,8 @@ export function speechText(initial: string, final: string, tone: number): string
   const syllable = makeSyllable(initial, final, tone);
   if (isWholeSyllable(initial, final)) return `整体认读 ${syllable}`;
   if (!initial) return syllable;
-  const parts = [initial, ...(final === "ong" ? [] : [makeSyllable("", final, tone)]), syllable];
+  const { medial, rest } = splitFinal(initial, final);
+  const parts = [initial, ...(medial ? [medial] : []), ...(rest === "ong" ? [] : [makeSyllable("", rest, tone)]), syllable];
   return parts.join(" — ");
 }
 
